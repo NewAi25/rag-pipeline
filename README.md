@@ -34,7 +34,7 @@ A small, beginner-friendly **Retrieval-Augmented Generation (RAG)** pipeline you
 
 ## The problem RAG solves
 
-Imagine a 200-page company handbook. You want an AI that can answer any question about it. The obvious approach is to paste the entire handbook into the model's prompt on every query. That works… for a while.
+Imagine a 400-page company handbook. You want an AI that can answer any question about it. The obvious approach is to paste the entire handbook into the model's prompt on every query. That works… for a while.
 
 Then three problems hit you at once:
 
