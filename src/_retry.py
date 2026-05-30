@@ -19,8 +19,10 @@ from openai import APIStatusError, RateLimitError
 
 T = TypeVar("T")
 
-# 1 + 2 + 4 + 8 = 15s of total backoff across 4 retries before giving up.
-_DEFAULT_BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0)
+# 1 + 2 + 4 + 8 + 16 + 32 = 63s of total backoff across 6 retries before
+# giving up. The 32s tail matters because Gemini's free-tier RPM window
+# resets on a ~minute boundary — a 15s ceiling sometimes wasn't enough.
+_DEFAULT_BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0, 16.0, 32.0)
 
 
 def _is_rate_limit(exc: BaseException) -> bool:

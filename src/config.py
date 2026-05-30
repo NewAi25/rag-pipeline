@@ -101,6 +101,7 @@ class Settings:
 
     # --- Retrieval ---
     top_k: int
+    retrieval_mode: str  # "vector" (default) or "hybrid"
 
     # --- Storage ---
     chroma_dir: Path
@@ -127,6 +128,13 @@ def load_settings() -> Settings:
     chat_model = _get_str("CHAT_MODEL", defaults["chat_model"])
     embed_model = _get_str("EMBED_MODEL", defaults["embed_model"])
 
+    retrieval_mode = _get_str("RETRIEVAL_MODE", "vector").lower()
+    if retrieval_mode not in {"vector", "hybrid"}:
+        raise RuntimeError(
+            f"Unknown RETRIEVAL_MODE={retrieval_mode!r}. "
+            "Set RETRIEVAL_MODE to 'vector' or 'hybrid'."
+        )
+
     return Settings(
         provider=provider,
         api_key=api_key,
@@ -136,6 +144,7 @@ def load_settings() -> Settings:
         chunk_size_tokens=_get_int("CHUNK_SIZE_TOKENS", 500),
         chunk_overlap_tokens=_get_int("CHUNK_OVERLAP_TOKENS", 50),
         top_k=_get_int("TOP_K", 4),
+        retrieval_mode=retrieval_mode,
         chroma_dir=Path(os.getenv("CHROMA_DIR", "./chroma_db")).resolve(),
         chroma_collection=os.getenv("CHROMA_COLLECTION", "rag_demo"),
     )

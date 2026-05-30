@@ -1,0 +1,82 @@
+{
+  "_meta": {
+    "source_document": "data/nist_ai_rmf_1.0.pdf",
+    "source_url": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf",
+    "license": "U.S. Government work, public domain (17 U.S.C. § 105)",
+    "notes": "Each item has a question, a free-form ground_truth_answer for LLM-judging, and one or more relevant_snippets that must appear as substrings in at least one retrieved chunk for the item to count as a 'hit'. Snippets were verified by grep against the extracted PDF text."
+  },
+  "items": [
+    {
+      "id": "q01-functions",
+      "question": "What are the four functions of the AI RMF Core?",
+      "ground_truth_answer": "The four functions of the AI RMF Core are GOVERN, MAP, MEASURE, and MANAGE.",
+      "relevant_snippets": ["GOVERN", "MAP", "MEASURE", "MANAGE"]
+    },
+    {
+      "id": "q02-publication-date",
+      "question": "When was the AI RMF 1.0 published?",
+      "ground_truth_answer": "January 2023.",
+      "relevant_snippets": ["January 2023"]
+    },
+    {
+      "id": "q03-playbook-email",
+      "question": "Where can comments on the AI RMF Playbook be sent?",
+      "ground_truth_answer": "Comments on the AI RMF Playbook may be sent via email to AIframework@nist.gov.",
+      "relevant_snippets": ["AIframework@nist.gov"]
+    },
+    {
+      "id": "q04-trustworthy-characteristics",
+      "question": "List the characteristics of trustworthy AI systems described in the framework.",
+      "ground_truth_answer": "Valid and reliable, safe, secure and resilient, accountable and transparent, explainable and interpretable, privacy-enhanced, and fair with harmful bias managed.",
+      "relevant_snippets": ["valid and reliable", "secure and resilient", "harmful bias"]
+    },
+    {
+      "id": "q05-voluntary",
+      "question": "Is the AI RMF mandatory or voluntary?",
+      "ground_truth_answer": "The Framework is intended to be voluntary, rights-preserving, non-sector-specific, and use-case agnostic.",
+      "relevant_snippets": ["voluntary, rights-preserving"]
+    },
+    {
+      "id": "q06-govern-cross-cutting",
+      "question": "How does the GOVERN function relate to the other AI RMF functions?",
+      "ground_truth_answer": "GOVERN is a cross-cutting function that is infused throughout AI risk management and enables the other functions of the process.",
+      "relevant_snippets": ["cross-cutting function"]
+    },
+    {
+      "id": "q07-socio-technical",
+      "question": "Why are AI systems described as socio-technical?",
+      "ground_truth_answer": "AI systems are inherently socio-technical in nature, meaning they are influenced by societal dynamics and human behavior.",
+      "relevant_snippets": ["socio-technical"]
+    },
+    {
+      "id": "q08-review-year",
+      "question": "By what year does NIST expect to formally review the AI RMF?",
+      "ground_truth_answer": "A review with formal input from the AI community is expected to take place no later than 2028.",
+      "relevant_snippets": ["2028"]
+    },
+    {
+      "id": "q09-ai-actor-definition",
+      "question": "Who is defined as an AI actor in the AI RMF?",
+      "ground_truth_answer": "AI actors are defined by the OECD as those who play an active role in the AI system lifecycle, including organizations and individuals that deploy or operate AI.",
+      "relevant_snippets": ["active role in the AI system lifecycle"]
+    },
+    {
+      "id": "q10-versioning",
+      "question": "How does the AI RMF version-number itself?",
+      "ground_truth_answer": "The Framework employs a two-number versioning system: the first number represents the generation (e.g. 1.0) and the second tracks minor revisions (e.g. 1.1).",
+      "relevant_snippets": ["two-number versioning"]
+    },
+    {
+      "id": "q11-document-id",
+      "question": "What is the official NIST publication number of the AI Risk Management Framework?",
+      "ground_truth_answer": "NIST AI 100-1.",
+      "relevant_snippets": ["NIST AI 100-1"]
+    },
+    {
+      "id": "q12-bias-section",
+      "question": "What does section 3.7 of the framework cover?",
+      "ground_truth_answer": "Fair – with Harmful Bias Managed.",
+      "relevant_snippets": ["Harmful Bias Managed"]
+    }
+  ]
+}

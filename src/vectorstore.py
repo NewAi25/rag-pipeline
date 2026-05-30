@@ -61,6 +61,8 @@ class VectorStore(Protocol):
 
     def reset(self) -> None: ...
 
+    def all_documents(self) -> list[Retrieved]: ...
+
 
 class ChromaVectorStore:
     """Chroma-backed implementation of :class:`VectorStore`.
@@ -146,6 +148,30 @@ class ChromaVectorStore:
             embedding_function=None,
             metadata={"hnsw:space": "cosine"},
         )
+
+    def all_documents(self) -> list[Retrieved]:
+        """Return every chunk in the collection (no embeddings, no scores).
+
+        Used by the hybrid retriever to build a BM25 index over the same
+        corpus. ``distance`` is set to 0.0 since these aren't query hits.
+        """
+        res = self._collection.get(include=["documents", "metadatas"])
+        ids = res.get("ids", []) or []
+        docs = res.get("documents", []) or []
+        metas = res.get("metadatas", []) or []
+        out: list[Retrieved] = []
+        for id_, doc, meta in zip(ids, docs, metas):
+            meta = meta or {}
+            out.append(
+                Retrieved(
+                    id=id_,
+                    text=doc or "",
+                    source=str(meta.get("source", "unknown")),
+                    chunk_index=int(meta.get("chunk_index", -1)),
+                    distance=0.0,
+                )
+            )
+        return out
 
 
 # ---------------------------------------------------------------------------

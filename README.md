@@ -21,14 +21,18 @@ A small, beginner-friendly **Retrieval-Augmented Generation (RAG)** pipeline you
 6. [Setup](#setup)
 7. [Quickstart (with the bundled sample)](#quickstart-with-the-bundled-sample)
 8. [Use your own document](#use-your-own-document)
-9. [Optional: Streamlit chat UI](#optional-streamlit-chat-ui)
-10. [Configuration](#configuration)
-11. [Swap the components](#swap-the-components)
-12. [Troubleshooting](#troubleshooting)
-13. [Project structure](#project-structure)
-14. [Future scope](#future-scope)
-15. [Contributing](#contributing)
-16. [License](#license)
+9. [Bigger dataset: NIST AI Risk Management Framework](#bigger-dataset-nist-ai-risk-management-framework)
+10. [Hybrid retrieval (BM25 + vector)](#hybrid-retrieval-bm25--vector)
+11. [Evaluation: how we measured retrieval quality](#evaluation-how-we-measured-retrieval-quality)
+12. [Optional: Streamlit chat UI](#optional-streamlit-chat-ui)
+13. [Live demo](#live-demo)
+14. [Configuration](#configuration)
+15. [Swap the components](#swap-the-components)
+16. [Troubleshooting](#troubleshooting)
+17. [Project structure](#project-structure)
+18. [Future scope](#future-scope)
+19. [Contributing](#contributing)
+20. [License](#license)
 
 ---
 
@@ -233,6 +237,128 @@ docker compose run --rm rag python -m src.cli ask "Your question here"
 
 ---
 
+## Bigger dataset: NIST AI Risk Management Framework
+
+The bundled `data/sample.pdf` is a toy — only ~2 chunks. To stress-test retrieval
+and measure quality changes meaningfully, this repo also ships a downloader for
+a real document:
+
+- **NIST AI Risk Management Framework 1.0** (NIST AI 100-1), January 2023
+- **Source:** [https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf)
+- **License:** U.S. Government work, public domain under 17 U.S.C. § 105
+- **Size:** ~48 pages, ~49 chunks at the default settings
+
+Grab it with one command:
+
+```bash
+docker compose run --rm rag python scripts/get_dataset.py
+docker compose run --rm rag python -m src.cli clear --yes
+docker compose run --rm rag python -m src.cli ingest data/nist_ai_rmf_1.0.pdf
+docker compose run --rm rag python -m src.cli ask "What are the four functions of the AI RMF Core?"
+```
+
+This is the dataset used by the evaluation harness below.
+
+---
+
+## Hybrid retrieval (BM25 + vector)
+
+Pure vector retrieval is great at semantic matching but can miss rare keywords,
+identifiers, and proper nouns — the embedding model smooths them into similar-
+looking neighbours. Pure BM25 is the opposite: it nails exact lexical matches
+but is blind to paraphrase.
+
+This repo includes a **hybrid retriever** that runs both in parallel and fuses
+their results with **Reciprocal Rank Fusion** (Cormack et al., 2009):
+
+```
+score(doc) = sum over each retriever of  1 / (k + rank_in_that_retriever)
+```
+
+The implementation is in [src/hybrid.py](src/hybrid.py) and pulls in one small
+pure-Python dependency (`rank-bm25`, ~50 KB) — no torch, no cross-encoders, no
+GPU. The BM25 index is built lazily per query from whatever's in the vector
+store, which keeps both retrievers perfectly in sync.
+
+Switch on hybrid mode by setting one env var:
+
+```dotenv
+RETRIEVAL_MODE=hybrid    # default is "vector"
+```
+
+That's it — no re-ingest needed.
+
+---
+
+## Evaluation: how we measured retrieval quality
+
+To compare `vector` vs. `hybrid` honestly, [eval/run_eval.py](eval/run_eval.py)
+runs a labeled eval set ([eval/dataset.json](eval/dataset.json) — 12 questions
+written by reading the NIST AI RMF) and computes six metrics:
+
+**Deterministic** (cheap, no LLM):
+
+| Metric | What it asks |
+|---|---|
+| Hit@k | Did *any* retrieved chunk contain the labeled relevant snippet? |
+| MRR | At what rank did the first hit appear? (Higher is better.) |
+| Context precision | Of the chunks we retrieved, what fraction were relevant? |
+| Context recall | Of the labeled snippets, what fraction did we surface? |
+
+**LLM-judged** (one chat call per question, scored by Gemini):
+
+| Metric | What it asks |
+|---|---|
+| Faithfulness | Is every claim in the generated answer supported by the retrieved context? |
+| Answer relevance | Does the answer actually address the question? |
+
+We rolled our own metrics in plain Python rather than wiring up RAGAS — RAGAS's
+Gemini integration goes through extra LangChain wrappers and has been brittle
+in practice; a small, transparent harness keeps the trust chain short. The
+metric definitions are documented at the top of `eval/run_eval.py`.
+
+### Results: vector vs. hybrid on the NIST AI RMF dataset
+
+12 labeled questions, top-k = 4, run on 2026-05-30:
+
+| Metric | vector | hybrid | Δ |
+| --- | --- | --- | --- |
+| Hit@k             | 91.7%  | **100.0%** | +8.3 pp |
+| MRR               | 0.854  | **0.944**  | +0.090 |
+| Context precision | 39.6%  | **45.8%**  | +6.2 pp |
+| Context recall    | 91.7%  | **100.0%** | +8.3 pp |
+
+Hybrid retrieval wins on every metric, but the headline is one specific
+question: `q12-bias-section` asks *"What does section 3.7 of the framework
+cover?"* — the relevant chunk is the literal heading **"Harmful Bias
+Managed"**. Pure vector retrieval doesn't surface that heading in its top-4;
+it pulls semantically-related discussions of fairness from elsewhere
+instead. BM25 latches onto the rare tokens (`3.7`, *"Harmful Bias Managed"*),
+and after Reciprocal Rank Fusion the correct chunk lands in the top-4. This
+is exactly the failure mode hybrid is designed to fix: **rare keywords,
+identifiers, and exact phrasings get washed out by dense embeddings**, and
+a cheap keyword channel recovers them at near-zero cost.
+
+> **LLM-judge metrics (faithfulness, answer relevance)** were not run for
+> this report — a both-modes full run needs ~48 chat-API calls, which
+> exceeds Gemini's free-tier 20-requests-per-day cap on `gemini-2.5-flash`.
+> The deterministic metrics above use only embedding calls (a different,
+> much-higher quota) and are the load-bearing measure for retrieval
+> quality. `eval/run_eval.py` runs both whenever you have the budget.
+
+_Per-question breakdown and full reproduce steps live in [eval/RESULTS.md](eval/RESULTS.md)._
+
+Reproduce locally:
+
+```bash
+docker compose run --rm rag python eval/run_eval.py --modes vector hybrid
+```
+
+The harness paces chat calls (~13 s between them by default) so a single Gemini
+free-tier key can complete the full run without tripping the 5-RPM cap.
+
+---
+
 ## Optional: Streamlit chat UI
 
 If you prefer a browser instead of the CLI:
@@ -242,6 +368,18 @@ docker compose up ui
 ```
 
 Open [http://localhost:8501](http://localhost:8501). Upload a PDF in the sidebar, ingest it with one click, and chat with it in the main pane. Source chunks are shown in an expandable panel beneath each answer.
+
+---
+
+## Live demo
+
+<!-- LIVE_DEMO_PLACEHOLDER -->
+
+Deploying the demo yourself? See [DEPLOY.md](DEPLOY.md) for click-by-click
+instructions for Hugging Face Spaces (recommended, Docker SDK) and Streamlit
+Community Cloud (fallback). The app supports a `DEMO_MODE=1` toggle that
+disables upload, auto-ingests the NIST PDF on first request, and caps each
+visitor's session at 20 questions to protect the shared API key.
 
 ---
 
@@ -259,9 +397,13 @@ All settings live in `.env` (copied from `.env.example`).
 | `CHUNK_SIZE_TOKENS`    | `500`                  | Target chunk length in tokens. ~500 ≈ a paragraph.                                                     |
 | `CHUNK_OVERLAP_TOKENS` | `50`                   | Tokens shared between consecutive chunks. Prevents ideas from getting cut in half at the boundary.     |
 | `TOP_K`                | `4`                    | How many chunks to retrieve per question.                                                              |
+| `RETRIEVAL_MODE`       | `vector`               | `vector` (dense embeddings only) or `hybrid` (BM25 + vector, fused with RRF). See [Hybrid retrieval](#hybrid-retrieval-bm25--vector). |
 | `CHROMA_DIR`           | `./chroma_db`          | Where the local vector store lives on disk (auto-created on first ingest).                             |
 | `CHROMA_COLLECTION`    | `rag_demo`             | Collection name inside Chroma.                                                                         |
 | `ANONYMIZED_TELEMETRY` | `False`                | Silence Chroma's anonymous usage pings (also avoids noisy posthog log lines).                          |
+| `DEMO_MODE`            | `0`                    | When `1`, runs `app.py` as a read-only public demo (no upload, auto-ingest, session quota). See [DEPLOY.md](DEPLOY.md). |
+| `DEMO_PDF`             | `data/nist_ai_rmf_1.0.pdf` | Which PDF the demo auto-ingests on first request.                                                       |
+| `DEMO_QUESTION_CAP`    | `20`                   | Per-browser-session question limit in demo mode.                                                       |
 
 > **Embedding-model warning.** The Gemini default **must be `gemini-embedding-001`**. The older `text-embedding-004` has been retired and returns 404. **If you change `EMBED_MODEL`, you must `clear` and re-ingest** — vectors from different models live in different geometric spaces and aren't comparable.
 
@@ -316,11 +458,21 @@ rag-pipeline/
 ├── .env.example            # Copy to .env and fill in your key
 ├── .dockerignore           # Keep secrets and the local DB out of the image
 ├── .gitignore              # Keep secrets and caches out of git
+├── DEPLOY.md               # How to deploy the live read-only demo
 ├── LICENSE                 # MIT
 ├── README.md               # You are here
 ├── data/
-│   └── sample.pdf          # A tiny bundled doc so the demo works out of the box
+│   ├── sample.pdf              # Tiny bundled doc for the smoke-test quickstart
+│   └── nist_ai_rmf_1.0.pdf     # Real eval dataset (created by get_dataset.py)
+├── docs/images/            # README screenshots
+├── eval/
+│   ├── dataset.json        # 12 labeled Q&A items for the NIST dataset
+│   ├── run_eval.py         # Deterministic + LLM-judged metrics, vector vs. hybrid
+│   └── RESULTS.md          # Last evaluation run's metrics + interpretation
+├── huggingface-space/
+│   └── README.md           # Space-level README with YAML frontmatter (Docker SDK)
 ├── scripts/
+│   ├── get_dataset.py      # Downloads NIST AI RMF 1.0 PDF
 │   └── make_sample_pdf.py  # Regenerates data/sample.pdf
 ├── src/
 │   ├── __init__.py
@@ -328,12 +480,13 @@ rag-pipeline/
 │   ├── chunking.py         # STEP 1 — token-aware overlapping chunker
 │   ├── embeddings.py       # STEP 2 — OpenAI-compatible embedding client
 │   ├── vectorstore.py      # STEP 3 — Chroma wrapper + Pinecone/pgvector stubs
-│   ├── retrieve.py         # STEP 4 — similarity search
+│   ├── retrieve.py         # STEP 4 — dispatches vector vs hybrid
+│   ├── hybrid.py           # BM25 + vector + Reciprocal Rank Fusion
 │   ├── generate.py         # Grounded-answer prompt + LLM call
 │   ├── ingest.py           # Ties steps 1–3 together for one PDF
 │   ├── _retry.py           # Exponential-backoff helper for 429s
 │   └── cli.py              # `ingest` / `ask` / `clear` Typer commands
-├── app.py                  # Optional Streamlit chat UI
+├── app.py                  # Streamlit UI (with DEMO_MODE for public demos)
 └── tests/
     └── test_chunking.py    # Unit tests for the chunker
 ```
