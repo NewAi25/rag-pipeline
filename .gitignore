@@ -27,6 +27,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Stray screenshots / clipboard dumps
+output.png
+*.tmp
+
 # Build artifacts
 build/
 dist/

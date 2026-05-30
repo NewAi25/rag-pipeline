@@ -4,6 +4,8 @@
 
 A small, beginner-friendly **Retrieval-Augmented Generation (RAG)** pipeline you can clone, point at any PDF (a 200-page company handbook, a stack of research papers, a contract, your meeting notes), and start asking questions in under five minutes. Runs locally in Docker. Uses Google Gemini's **free** API by default — switch to OpenAI or fully-local Ollama with a one-line config change.
 
+> 🔴 **Live demo:** _coming soon_ — deployment in progress, see [DEPLOY.md](DEPLOY.md). The URL will be linked here once the Hugging Face Space is up.
+
 [![Python](https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -351,11 +353,19 @@ _Per-question breakdown and full reproduce steps live in [eval/RESULTS.md](eval/
 Reproduce locally:
 
 ```bash
-docker compose run --rm rag python eval/run_eval.py --modes vector hybrid
+# Deterministic metrics only (no chat-API quota used):
+docker compose run --rm -v "$(pwd)/eval:/app/eval" rag \
+    python eval/run_eval.py --modes vector hybrid --no-judge
+
+# With LLM-judge metrics too (~48 chat calls — paid Gemini or wait for daily quota reset):
+docker compose run --rm -v "$(pwd)/eval:/app/eval" rag \
+    python eval/run_eval.py --modes vector hybrid
 ```
 
-The harness paces chat calls (~13 s between them by default) so a single Gemini
-free-tier key can complete the full run without tripping the 5-RPM cap.
+The `-v "$(pwd)/eval:/app/eval"` mount lets the runner write `eval/RESULTS.md`
+back to your host. The harness paces chat calls (~13 s between them by
+default) so a single Gemini free-tier key can complete the judged run without
+tripping the 5-RPM cap.
 
 ---
 
@@ -404,6 +414,7 @@ All settings live in `.env` (copied from `.env.example`).
 | `DEMO_MODE`            | `0`                    | When `1`, runs `app.py` as a read-only public demo (no upload, auto-ingest, session quota). See [DEPLOY.md](DEPLOY.md). |
 | `DEMO_PDF`             | `data/nist_ai_rmf_1.0.pdf` | Which PDF the demo auto-ingests on first request.                                                       |
 | `DEMO_QUESTION_CAP`    | `20`                   | Per-browser-session question limit in demo mode.                                                       |
+| `DEMO_TITLE`           | *(NIST AI RMF banner)* | Override the title shown above the chat in demo mode.                                                  |
 
 > **Embedding-model warning.** The Gemini default **must be `gemini-embedding-001`**. The older `text-embedding-004` has been retired and returns 404. **If you change `EMBED_MODEL`, you must `clear` and re-ingest** — vectors from different models live in different geometric spaces and aren't comparable.
 
@@ -441,7 +452,7 @@ Implement the same four methods in a new class, return it from `get_vector_store
 | `Cannot connect to the Docker daemon` / `error during connect`                                   | Docker Desktop / Docker Engine isn't running.                                                                          | Start Docker Desktop (or `sudo systemctl start docker` on Linux), then retry.                                                    |
 | Lots of `Failed to send telemetry event` log lines                                               | Chroma's bundled posthog client and `chromadb` version drift.                                                          | Already silenced: `ANONYMIZED_TELEMETRY=False` is in `.env`, plus the posthog logger is muted in code. Make sure your `.env` has the line. |
 | `Number of requested results 4 is greater than number of elements in index N`                    | You're querying before enough chunks are indexed.                                                                      | Either ingest more, or lower `TOP_K` in `.env`. The notice is harmless — Chroma still returns what it has.                       |
-| `429 RESOURCE_EXHAUSTED`                                                                          | Gemini's free-tier per-minute or per-day cap.                                                                          | The pipeline auto-retries with exponential backoff (1s → 2s → 4s → 8s). If it persists, wait or switch to `PROVIDER=openai`.     |
+| `429 RESOURCE_EXHAUSTED`                                                                          | Gemini's free-tier per-minute or per-day cap.                                                                          | The pipeline auto-retries with exponential backoff (1s → 2s → 4s → 8s → 16s → 32s, total 63 s across 6 retries). If it persists, you've likely hit the per-day cap — wait, lower your usage, or switch to `PROVIDER=openai`. |
 | `No extractable text found in <file>.pdf`                                                        | The PDF is a scanned image, not real text.                                                                             | OCR it first: `ocrmypdf in.pdf out.pdf` (then ingest `out.pdf`).                                                                 |
 | Answer is `I don't know based on the provided document.` for a question you *know* is in the PDF | Either the chunk wasn't retrieved (`TOP_K` too low / question phrased differently from the doc), or the chunk has poor semantic match. | Try `TOP_K=8`, rephrase the question to use words closer to the document, or shrink `CHUNK_SIZE_TOKENS` for finer-grained matches. |
 
@@ -464,8 +475,11 @@ rag-pipeline/
 ├── data/
 │   ├── sample.pdf              # Tiny bundled doc for the smoke-test quickstart
 │   └── nist_ai_rmf_1.0.pdf     # Real eval dataset (created by get_dataset.py)
-├── docs/images/            # README screenshots
+├── docs/
+│   └── images/
+│       └── quickstart-demo.png  # Screenshot of the bundled-sample ingest+ask run
 ├── eval/
+│   ├── __init__.py
 │   ├── dataset.json        # 12 labeled Q&A items for the NIST dataset
 │   ├── run_eval.py         # Deterministic + LLM-judged metrics, vector vs. hybrid
 │   └── RESULTS.md          # Last evaluation run's metrics + interpretation
