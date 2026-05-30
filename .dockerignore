@@ -1,0 +1,13 @@
+# Keep the build context small and never bake secrets or local DBs into the image.
+.env
+chroma_db/
+.chroma/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.git/
+.gitignore
+*.md
+.pytest_cache/
+.DS_Store

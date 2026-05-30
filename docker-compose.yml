@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# docker-compose.yml
+#
+# Defines one service, `rag`, that runs the pipeline in a pinned Python 3.12
+# environment. Volumes keep your PDFs and the vector database on your host
+# machine, so data persists between runs and you can drop new PDFs into ./data
+# without rebuilding the image.
+# ---------------------------------------------------------------------------
+services:
+  rag:
+    build: .
+    image: rag-demo:latest
+    # Load OPENAI_API_KEY and any tunable settings from your .env file.
+    env_file:
+      - .env
+    environment:
+      # Store the Chroma DB inside the mounted volume so embeddings persist.
+      CHROMA_DIR: /app/chroma_db
+    volumes:
+      # Your PDFs live here on the host; the container reads them.
+      - ./data:/app/data
+      # Persisted vector database (created on first `ingest`).
+      - ./chroma_db:/app/chroma_db
+    # Default command just prints help. Override it with `docker compose run`.
+    command: ["python", "-m", "src.cli", "--help"]
+
+  # Optional Streamlit chat UI. Start it with: docker compose up ui
+  ui:
+    build: .
+    image: rag-demo:latest
+    env_file:
+      - .env
+    environment:
+      CHROMA_DIR: /app/chroma_db
+    volumes:
+      - ./data:/app/data
+      - ./chroma_db:/app/chroma_db
+    ports:
+      - "8501:8501"
+    command: ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
