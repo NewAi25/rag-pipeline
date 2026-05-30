@@ -165,17 +165,9 @@ docker compose run --rm rag python -m src.cli ask "What is the refund policy?"
 
 Example output:
 
-```
-Answer:
-The refund policy allows full refunds within 30 days of purchase
-for items in original condition. [sample.pdf#chunk-2]
+![Quickstart: ingest + ask running end-to-end against data/sample.pdf](docs/images/quickstart-demo.png)
 
-Sources used:
-  - [sample.pdf#chunk-2] (distance=0.214)  Refund policy: customers may return any item in...
-  - [sample.pdf#chunk-1] (distance=0.481)  Welcome to ACME Co. This handbook covers our...
-```
-
-The answer is grounded in the document, the chunks that produced it are shown, and the prompt told the model to say *"I don't know based on the provided document"* when the answer isn't there — so you can trust the output.
+The answer is grounded in the document, the chunks that produced it are shown with their similarity distance, and the prompt told the model to say *"I don't know based on the provided document"* when the answer isn't there — so you can trust the output.
 
 ### Shorter, with `make`
 
